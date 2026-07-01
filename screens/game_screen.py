@@ -443,18 +443,17 @@ class GameWidget(Widget):
     def _unbind_input(self):
         Window.unbind(on_key_down=self._on_key_down, on_key_up=self._on_key_up)
 
-    def _on_key_down(self, window, key, scancode, codepoint, modifiers):
+    def _on_key_down(self, window, key, *args):
         if key == 32:  # Space
             self._boost_sources.add("space")
             return True
         return False
 
-    def _on_key_up(self, window, key, scancode, codepoint):
+    def _on_key_up(self, window, key, *args):
         if key == 32:
             self._boost_sources.discard("space")
             return True
         return False
-
 
 class GameScreen(Screen):
 
