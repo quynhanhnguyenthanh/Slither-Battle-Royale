@@ -2,29 +2,55 @@
 """
 config.py
 Cấu hình trung tâm cho game "Slither Sinh Tồn" (Slither Battle Royale).
-Tập trung mọi hằng số & bảng skin ở đây (Tính Module hóa).
+PHIÊN BẢN CHUYỂN ĐỘNG LIÊN TỤC 360° (giống slither.io).
+Đơn vị thế giới = pixel ở mức phóng đại 1.0.
 """
 
-# ---------- Kích thước thế giới (lưới - grid) ----------
-WORLD_W = 72
-WORLD_H = 72
-CELL = 28              # kích thước 1 ô (pixel) khi vẽ
+import math
 
-# ---------- Nhịp game ----------
-MOVE_INTERVAL = 0.18   # giây giữa 2 bước rắn (số lớn hơn = rắn chạy chậm hơn)
-FPS = 60
+# ---------- Sân chơi (hình tròn, giống slither.io) ----------
+ARENA_RADIUS = 1700.0        # bán kính sân (px thế giới)
+BG_GRID = 64                 # bước lưới nền (px)
 
-# ---------- Thiết lập màn chơi ----------
-NUM_BOTS = 8
-FOOD_COUNT = 90
-START_LENGTH = 4
+# ---------- Vật lý rắn ----------
+BASE_SPEED = 165.0           # tốc độ thường (px/giây)
+BOOST_SPEED = 300.0          # tốc độ khi tăng tốc
+TURN_RATE = 4.8              # tốc độ bẻ lái tối đa (radian/giây) -> mượt 360°
+SEG_SPACING = 6.0            # khoảng cách giữa 2 điểm xương sống
+BASE_RADIUS = 11.0           # bán kính đốt cơ bản
+START_LENGTH = 30            # số điểm thân ban đầu
+MIN_LENGTH = 14              # ngắn nhất có thể
+GROW_PER_FOOD = 2.2          # +điểm thân mỗi hạt mồi thường
+GROW_PER_LOOT = 4.5          # +điểm thân mỗi hạt loot
+BOOST_DRAIN = 16.0           # điểm thân mất mỗi giây khi tăng tốc
+BOOST_MIN_LENGTH = 18        # phải dài hơn mức này mới tăng tốc được
 
-# ---------- Phần thưởng ----------
+
+def snake_radius(length):
+    """Rắn càng dài càng to (nhưng có giới hạn)."""
+    return BASE_RADIUS + min(length, 500) * 0.032
+
+
+def snake_zoom(length):
+    """Rắn càng dài, camera lùi ra xa để vẫn thấy được (giống slither.io)."""
+    z = 1.0 - (length - START_LENGTH) * 0.0007
+    return max(0.55, min(1.0, z))
+
+
+# ---------- Mồi ----------
+FOOD_COUNT = 300
+FOOD_RADIUS = 6.0
 FOOD_SCORE = 1
 FOOD_COIN = 1
+LOOT_RADIUS = 9.5
 LOOT_SCORE = 3
 LOOT_COIN = 2
+
+# ---------- Đối thủ (bot) ----------
+NUM_BOTS = 10
 KILL_BONUS_COIN = 10
+
+FPS = 60
 
 # ---------- Màu nền / lưới (RGBA 0..1) ----------
 COLOR_BG = (0.05, 0.06, 0.09, 1)
@@ -48,9 +74,7 @@ UI = {
     "card_gradient": "skin_card_gradient.png",
 }
 
-# ---------- Bảng skin (dùng sprite thật trong assets/images/skins) ----------
-# body/head: tên file; eyes=True -> tự vẽ 2 con mắt (skin không có mặt sẵn).
-# fallback: màu dự phòng nếu thiếu ảnh (game vẫn chạy).
+# ---------- Bảng skin (sprite thật trong assets/images/skins) ----------
 SKINS = [
     {"id": "main", "name": "Cổ điển", "price": 0,
      "body": "snake_main.png", "head": None, "eyes": True,
@@ -97,7 +121,6 @@ SKINS = [
      "fallback_head": (0.88, 0.16, 0.22, 1), "fallback_body": (0.72, 0.12, 0.18, 1)},
 ]
 
-# Các skin (body-only) dùng ngẫu nhiên cho bot
 BOT_SKIN_POOL = ["jelly", "jelly_blue", "jelly_red", "black_ice",
                  "stars", "canada", "outlined", "vamp"]
 
