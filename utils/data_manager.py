@@ -18,10 +18,11 @@ class DataManager:
     DEFAULT_DATA = {
         "best_score": 0,
         "coins": 0,
-        "owned_skins": ["classic"],
-        "current_skin": "classic",
+        "owned_skins": ["main"],
+        "current_skin": "main",
         "volume": 0.7,
         "sfx_on": True,
+        "music_on": True,
     }
 
     def __init__(self, path="game_data.json"):
@@ -118,3 +119,10 @@ class DataManager:
         self.save()
         return self._data["sfx_on"]
 
+    def is_music_on(self):
+        return self._data.get("music_on", True)
+
+    def toggle_music(self):
+        self._data["music_on"] = not self.is_music_on()
+        self.save()
+        return self._data["music_on"]
