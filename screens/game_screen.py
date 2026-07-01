@@ -2,14 +2,13 @@
 """
 screens/game_screen.py
 
-Trái tim của game.
-- GameWidget: trạng thái thế giới (rắn, mồi), vòng lặp, va chạm, camera
-  cuộn theo người chơi, và VẼ MỌI THỨ BẰNG SPRITE (assets/images).
-- GameScreen: bọc GameWidget + lớp vignette + HUD (điểm, coin, số bot, tạm dừng).
-
-Thể hiện: TƯƠNG TÁC ĐỐI TƯỢNG, thuật toán va chạm, QUẢN LÝ TRẠNG THÁI.
+Gameplay LIÊN TỤC 360° (giống slither.io).
+- GameWidget: mô phỏng thế giới liên tục + vẽ bằng sprite, camera bám đầu rắn
+  (có thu phóng theo độ dài), điều khiển bằng con trỏ/chạm, tăng tốc + vệt sáng.
+- GameScreen: GameWidget + vignette + HUD (điểm, coin, độ dài, số bot) + nút BOOST.
 """
 
+import math
 import random
 
 from kivy.uix.screenmanager import Screen
@@ -26,14 +25,12 @@ from kivy.core.window import Window
 
 import config
 from utils import assets
-from entities import PlayerSnake, BotSnake, Food, Loot, UP, DOWN, LEFT, RIGHT
+from entities import PlayerSnake, BotSnake, Food, Loot
 
-# Góc quay đầu rắn theo hướng (sprite mặc định hướng LÊN)
-_HEAD_ANGLE = {UP: 0, LEFT: 90, DOWN: 180, RIGHT: 270}
+TWO_PI = 2 * math.pi
 
 
 class GameWidget(Widget):
-    """Vùng chơi: mô phỏng và vẽ thế giới lưới bằng sprite."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -46,56 +43,56 @@ class GameWidget(Widget):
         self.player = None
         self.snakes = []
         self.foods = []
+        self.arena = config.ARENA_RADIUS
 
         self.running = False
         self.paused = False
-        self._acc = 0.0
         self.elapsed = 0.0
         self.bots_killed = 0
         self.coins_earned = 0
         self._start_bots = 0
 
-    # ---------------- Khởi tạo màn chơi ----------------
+        # Điều khiển
+        self._touch_steer = False
+        self._last_mouse = None
+        self._boost_sources = set()
+        self._was_boosting = False
+
+    # ---------------- Khởi tạo ----------------
     def reset(self, data, audio):
         self.data = data
         self.audio = audio
         self.snakes = []
         self.foods = []
-        self._acc = 0.0
         self.elapsed = 0.0
         self.bots_killed = 0
         self.coins_earned = 0
         self.paused = False
+        self._boost_sources = set()
+        self._was_boosting = False
+        self._touch_steer = False
+        self._last_mouse = None
 
-        # Người chơi ở giữa bản đồ, dùng skin đang chọn.
         skin = config.get_skin(self.data.get_current_skin())
         self.player = PlayerSnake(
-            config.WORLD_W // 2, config.WORLD_H // 2,
-            direction=RIGHT, length=config.START_LENGTH,
+            0, 0, angle=0.0, length=config.START_LENGTH,
             skin_id=skin["id"],
             head_color=skin["fallback_head"], body_color=skin["fallback_body"],
-            name="You",
-        )
+            name="You")
         self.snakes.append(self.player)
 
-        # Bot: skin ngẫu nhiên trong pool.
         for i in range(config.NUM_BOTS):
-            pos = self._random_free_cell(margin=3)
-            if pos is None:
-                break
+            x, y = self._random_point(0.85)
             bskin = config.get_skin(random.choice(config.BOT_SKIN_POOL))
-            bot = BotSnake(
-                pos[0], pos[1],
-                direction=random.choice([UP, DOWN, LEFT, RIGHT]),
-                length=config.START_LENGTH,
+            self.snakes.append(BotSnake(
+                x, y, angle=random.uniform(0, TWO_PI),
+                length=random.randint(config.START_LENGTH, config.START_LENGTH + 40),
                 skin_id=bskin["id"],
                 head_color=bskin["fallback_head"], body_color=bskin["fallback_body"],
-                name="Bot%d" % (i + 1),
-            )
-            self.snakes.append(bot)
+                name="Bot%d" % (i + 1)))
 
         self._start_bots = len(self.snakes) - 1
-        for _ in range(config.FOOD_COUNT):
+        while len(self.foods) < config.FOOD_COUNT:
             self._spawn_food()
 
     def start(self):
@@ -103,154 +100,164 @@ class GameWidget(Widget):
         self.paused = False
         Clock.unschedule(self.update)
         Clock.schedule_interval(self.update, 1.0 / config.FPS)
-        self._bind_keys()
+        self._bind_input()
 
     def stop(self):
         self.running = False
         Clock.unschedule(self.update)
-        self._unbind_keys()
+        self._unbind_input()
 
     def toggle_pause(self):
         self.paused = not self.paused
         return self.paused
 
-    # ---------------- Trợ giúp không gian ----------------
-    def _all_occupied(self):
-        cells = set()
-        for s in self.snakes:
-            cells.update(s.body)
-        cells.update(f.pos for f in self.foods)
-        return cells
-
-    def _random_free_cell(self, margin=1):
-        occupied = self._all_occupied()
-        for _ in range(200):
-            x = random.randint(margin, config.WORLD_W - 1 - margin)
-            y = random.randint(margin, config.WORLD_H - 1 - margin)
-            if (x, y) not in occupied:
-                return (x, y)
-        return None
+    # ---------------- Sinh vị trí / mồi ----------------
+    def _random_point(self, frac=0.97):
+        r = math.sqrt(random.random()) * self.arena * frac
+        a = random.uniform(0, TWO_PI)
+        return (math.cos(a) * r, math.sin(a) * r)
 
     def _spawn_food(self):
-        pos = self._random_free_cell()
-        if pos:
-            self.foods.append(Food(pos[0], pos[1]))
+        x, y = self._random_point(0.97)
+        self.foods.append(Food(x, y))
 
-    def cell_blocked(self, cell, ignore_snake=None):
-        """Dùng cho AI của bot: ô có phải tường / thân rắn không?"""
-        x, y = cell
-        if x < 0 or x >= config.WORLD_W or y < 0 or y >= config.WORLD_H:
+    # ---------------- Trợ giúp cho AI bot ----------------
+    def nearest_food(self, x, y):
+        best = None
+        bd = 1e18
+        for f in self.foods:
+            d = (f.x - x) ** 2 + (f.y - y) ** 2
+            if d < bd:
+                bd = d
+                best = f
+        return best
+
+    def point_blocked(self, x, y, ignore=None):
+        if x * x + y * y > (self.arena - 18) ** 2:
             return True
         for s in self.snakes:
-            if s.occupies(cell):
-                return True
+            if s is ignore or not s.alive:
+                continue
+            thr = s.radius + 16
+            t2 = thr * thr
+            for (px, py) in s.points[::3]:
+                if (px - x) ** 2 + (py - y) ** 2 < t2:
+                    return True
         return False
 
-    # ---------------- Vòng lặp game ----------------
+    # ---------------- Vòng lặp ----------------
     def update(self, dt):
         if not self.running or self.paused:
             self.draw()
             return
+        dt = min(dt, 1.0 / 30.0)
         self.elapsed += dt
-        self._acc += dt
-        while self._acc >= config.MOVE_INTERVAL:
-            self._acc -= config.MOVE_INTERVAL
-            self._logic_step()
-            if not self.running:
-                break
-        self.draw()
 
-    def _logic_step(self):
-        alive = [s for s in self.snakes if s.alive]
+        # 1) Lái theo con trỏ chuột (nếu chuột di chuyển và không đang chạm)
+        mp = Window.mouse_pos
+        if self._last_mouse is None:
+            self._last_mouse = mp
+        if (not self._touch_steer) and mp != self._last_mouse:
+            self._last_mouse = mp
+            self._aim_at(mp)
 
-        for s in alive:                 # 1) chọn hướng (đa hình)
-            s.update_direction(self)
-        for s in alive:                 # 2) di chuyển
-            s.move()
+        # 2) Tăng tốc theo nguồn input + phát tiếng boost khi bắt đầu/kết thúc
+        boosting = len(self._boost_sources) > 0
+        if self.player:
+            self.player.boosting = boosting
+        if boosting and not self._was_boosting:
+            self.audio.play_sfx("boost_on")
+        elif not boosting and self._was_boosting:
+            self.audio.play_sfx("boost_off")
+        self._was_boosting = boosting
 
-        # 3) ăn mồi
-        food_map = {f.pos: f for f in self.foods}
-        for s in alive:
-            f = food_map.get(s.head)
-            if f and f in self.foods:
-                s.grow()
-                s.score += f.score
-                self.foods.remove(f)
-                del food_map[f.pos]
-                if s is self.player:
-                    self.data.add_coins(f.coin)
-                    self.coins_earned += f.coin
-                    self.audio.play_sfx("eat")
+        # 3) AI + di chuyển
+        for s in self.snakes:
+            if s.alive and s is not self.player:
+                s.update_direction(self)
+        for s in self.snakes:
+            if s.alive:
+                s.move(dt)
 
-        # 4) va chạm -> danh sách chết
-        dead = self._resolve_collisions(alive)
+        # 4) Ăn mồi
+        self._eat()
 
-        # 5) xử lý chết
+        # 5) Va chạm -> chết
+        dead = [s for s in self.snakes if s.alive and self._collides(s)]
         for s in dead:
             s.die()
             self._drop_loot(s)
-            if s in self.snakes:
-                self.snakes.remove(s)
             if s is not self.player:
+                self.snakes.remove(s)
                 self.bots_killed += 1
                 self.data.add_coins(config.KILL_BONUS_COIN)
                 self.coins_earned += config.KILL_BONUS_COIN
                 self.audio.play_sfx("kill")
 
-        # 6) duy trì số mồi
+        # 6) Bù mồi
         while len(self.foods) < config.FOOD_COUNT:
-            before = len(self.foods)
             self._spawn_food()
-            if len(self.foods) == before:
-                break
 
         # 7) HUD + thắng/thua
         bots_left = sum(1 for s in self.snakes if s is not self.player)
         if self.on_hud_update:
-            self.on_hud_update(self.player.score, self.data.get_coins(), bots_left)
+            self.on_hud_update(self.player.score, self.data.get_coins(),
+                               int(self.player.length), bots_left)
         if not self.player.alive:
-            self._finish(won=False)
+            self._finish(False)
         elif bots_left == 0:
-            self._finish(won=True)
+            self._finish(True)
 
-    def _resolve_collisions(self, snakes):
-        dead = []
-        for s in snakes:
-            hx, hy = s.head
-            if hx < 0 or hx >= config.WORLD_W or hy < 0 or hy >= config.WORLD_H:
-                dead.append(s)
+        self.draw()
+
+    def _eat(self):
+        for s in self.snakes:
+            if not s.alive:
                 continue
-            hit = False
-            for other in snakes:
-                if other is s:
-                    if s.head in s.body[1:]:
-                        hit = True
-                        break
+            hx, hy = s.head
+            reach = s.radius
+            remaining = []
+            for f in self.foods:
+                if (f.x - hx) ** 2 + (f.y - hy) ** 2 <= (reach + f.radius) ** 2:
+                    s.grow(f.grow)
+                    s.score += f.score
+                    if s is self.player:
+                        self.data.add_coins(f.coin)
+                        self.coins_earned += f.coin
+                        self.audio.play_sfx("eat")
                 else:
-                    if s.head == other.head or s.head in other.body:
-                        hit = True
-                        break
-            if hit:
-                dead.append(s)
-        return dead
+                    remaining.append(f)
+            self.foods = remaining
+
+    def _collides(self, snake):
+        hx, hy = snake.head
+        hr = snake.radius
+        if hx * hx + hy * hy > (self.arena - hr) ** 2:
+            return True
+        for other in self.snakes:
+            if other is snake or not other.alive:
+                continue
+            thr = hr + other.radius * 0.85
+            t2 = thr * thr
+            for (px, py) in other.points[::3]:
+                if (hx - px) ** 2 + (hy - py) ** 2 < t2:
+                    return True
+        return False
 
     def _drop_loot(self, snake):
-        occupied = {f.pos for f in self.foods}
-        for i, cell in enumerate(snake.body):
-            if i % 2 != 0:
-                continue
-            x, y = cell
-            if 0 <= x < config.WORLD_W and 0 <= y < config.WORLD_H and cell not in occupied:
-                self.foods.append(Loot(x, y))
-                occupied.add(cell)
+        for (px, py) in snake.points[::4]:
+            jx = px + random.uniform(-4, 4)
+            jy = py + random.uniform(-4, 4)
+            self.foods.append(Loot(jx, jy))
 
     def _finish(self, won):
         if not self.running:
             return
         self.running = False
         Clock.unschedule(self.update)
-        self._unbind_keys()
+        self._unbind_input()
         best = self.data.update_best_score(self.player.score)
+        self.data.save()
         stats = {
             "score": self.player.score,
             "coins_earned": self.coins_earned,
@@ -259,6 +266,7 @@ class GameWidget(Widget):
             "total_bots": self._start_bots,
             "new_best": best,
             "best_score": self.data.get_best_score(),
+            "length": int(self.player.length),
         }
         if won:
             self.audio.play_sfx("win")
@@ -269,149 +277,186 @@ class GameWidget(Widget):
             if self.on_game_over:
                 self.on_game_over(stats)
 
-    # ---------------- Vẽ (camera cuộn theo player) ----------------
+    # ---------------- Vẽ ----------------
     def draw(self):
         self.canvas.clear()
         if self.player is None:
             return
-        cam_x, cam_y = self.player.head
+        hx, hy = self.player.head
         cx, cy = self.center_x, self.center_y
-        cell = config.CELL
+        zoom = config.snake_zoom(self.player.length)
 
-        def to_screen(gx, gy):
-            return (cx + (gx - cam_x) * cell, cy + (gy - cam_y) * cell)
+        def to_screen(wx, wy):
+            return (cx + (wx - hx) * zoom, cy + (wy - hy) * zoom)
 
         circle_tex = assets.circle_texture()
+        blur_tex = assets._texture("ui", "blur.png")
+
+        # phạm vi thế giới nhìn thấy (để cull)
+        half_w = self.width / (2 * zoom) + 60
+        half_h = self.height / (2 * zoom) + 60
+
+        def visible(wx, wy, pad=0):
+            return (abs(wx - hx) <= half_w + pad and abs(wy - hy) <= half_h + pad)
 
         with self.canvas:
-            # Nền
             Color(*config.COLOR_BG)
             Rectangle(pos=self.pos, size=self.size)
 
-            # Lưới
+            # Lưới nền cuộn theo camera
             Color(*config.COLOR_GRID)
-            ox = (cx - cam_x * cell) % cell
-            oy = (cy - cam_y * cell) % cell
-            x = self.x + ox
-            while x < self.right:
-                Line(points=[x, self.y, x, self.top], width=1)
-                x += cell
-            y = self.y + oy
-            while y < self.top:
-                Line(points=[self.x, y, self.right, y], width=1)
-                y += cell
+            step = config.BG_GRID * zoom
+            if step >= 8:
+                ox = (cx - hx * zoom) % step
+                oy = (cy - hy * zoom) % step
+                gx = self.x + ox
+                while gx < self.right:
+                    Line(points=[gx, self.y, gx, self.top], width=1)
+                    gx += step
+                gy = self.y + oy
+                while gy < self.top:
+                    Line(points=[self.x, gy, self.right, gy], width=1)
+                    gy += step
 
-            # Tường (viền bản đồ)
+            # Viền sân (hình tròn)
             Color(*config.COLOR_WALL)
-            lx, ly = to_screen(-0.5, -0.5)
-            rx, ry = to_screen(config.WORLD_W - 0.5, config.WORLD_H - 0.5)
-            Line(rectangle=(lx, ly, rx - lx, ry - ly), width=2.5)
+            bx, by = to_screen(0, 0)
+            Line(circle=(bx, by, self.arena * zoom), width=3)
 
-            # Mồi (sprite circle tô màu)
+            # Mồi
             for f in self.foods:
-                sx, sy = to_screen(f.x, f.y)
-                if sx < self.x - cell or sx > self.right or sy < self.y - cell or sy > self.top:
+                if not visible(f.x, f.y):
                     continue
-                r = cell * f.radius_ratio
+                sx, sy = to_screen(f.x, f.y)
+                r = f.radius * zoom
                 Color(*f.color)
                 if circle_tex:
-                    Rectangle(texture=circle_tex,
-                              pos=(sx - r, sy - r), size=(2 * r, 2 * r))
+                    Rectangle(texture=circle_tex, pos=(sx - r, sy - r), size=(2 * r, 2 * r))
                 else:
                     Ellipse(pos=(sx - r, sy - r), size=(2 * r, 2 * r))
 
-            # Rắn (bot trước, người chơi vẽ sau -> nổi trên cùng)
+            # Rắn: bot trước, player sau (nổi trên)
             ordered = [s for s in self.snakes if s is not self.player]
-            if self.player:
-                ordered.append(self.player)
+            ordered.append(self.player)
             for s in ordered:
-                self._draw_snake(s, to_screen, cell)
+                self._draw_snake(s, to_screen, zoom, visible, circle_tex, blur_tex)
 
-    def _draw_snake(self, snake, to_screen, cell):
+            Color(1, 1, 1, 1)
+
+    def _draw_snake(self, snake, to_screen, zoom, visible, circle_tex, blur_tex):
         skin = config.get_skin(snake.skin_id)
         body_tex = assets.skin_body_texture(skin)
         head_tex = assets.skin_head_texture(skin)
+        r = snake.radius * zoom
+        pts = snake.points
 
-        bs = cell * 1.30  # sprite hơi to hơn ô để các đốt gối lên nhau
-        # Thân (vẽ từ đuôi lên để đốt gần đầu nằm trên)
-        for seg in reversed(snake.body[1:]):
-            sx, sy = to_screen(*seg)
-            if sx < self.x - cell or sx > self.right or sy < self.y - cell or sy > self.top:
+        # bước lấy mẫu để số vòng tròn hợp lý khi rắn to
+        step = max(1, int(snake.radius * 0.9 / config.SEG_SPACING))
+
+        # Vệt sáng khi tăng tốc (ở phần đuôi)
+        if snake.boosting and blur_tex:
+            gr = r * 2.6
+            Color(snake.body_color[0], snake.body_color[1], snake.body_color[2], 0.5)
+            for (px, py) in pts[-14::2]:
+                if not visible(px, py, 40):
+                    continue
+                sx, sy = to_screen(px, py)
+                Rectangle(texture=blur_tex, pos=(sx - gr, sy - gr), size=(2 * gr, 2 * gr))
+
+        # Thân: từ đuôi -> đầu để đốt gần đầu nằm trên
+        bs = r * 2.3
+        for i in range(len(pts) - 1, 0, -step):
+            px, py = pts[i]
+            if not visible(px, py):
                 continue
+            sx, sy = to_screen(px, py)
             if body_tex:
                 Color(1, 1, 1, 1)
                 Rectangle(texture=body_tex, pos=(sx - bs / 2, sy - bs / 2), size=(bs, bs))
             else:
                 Color(*snake.body_color)
-                Ellipse(pos=(sx - cell / 2, sy - cell / 2), size=(cell, cell))
+                Ellipse(pos=(sx - r, sy - r), size=(2 * r, 2 * r))
 
-        # Đầu (quay theo hướng, kèm mắt nếu skin không có mặt sẵn)
-        hx, hy = to_screen(*snake.head)
-        hs = cell * 1.40
-        angle = _HEAD_ANGLE.get(snake.direction, 0)
+        # Đầu (xoay theo góc) + mắt
+        hx, hy = pts[0]
+        sx, sy = to_screen(hx, hy)
+        hs = r * 3.0
+        angle_deg = math.degrees(snake.angle) - 90.0  # sprite mặc định hướng LÊN
         PushMatrix()
-        Rotate(angle=angle, origin=(hx, hy))
+        Rotate(angle=angle_deg, origin=(sx, sy))
         if head_tex:
             Color(1, 1, 1, 1)
-            Rectangle(texture=head_tex, pos=(hx - hs / 2, hy - hs / 2), size=(hs, hs))
+            Rectangle(texture=head_tex, pos=(sx - hs / 2, sy - hs / 2), size=(hs, hs))
         else:
             Color(*snake.head_color)
-            Ellipse(pos=(hx - cell / 2, hy - cell / 2), size=(cell, cell))
+            Ellipse(pos=(sx - r, sy - r), size=(2 * r, 2 * r))
         if skin.get("eyes"):
             eye_l, eye_r = assets.eye_textures()
-            es = cell * 0.58
-            ey = hy + cell * 0.16  # về phía trước (LÊN trong hệ chưa quay)
+            es = r * 1.05
+            ey = sy + r * 0.42  # về phía trước (LÊN trong hệ chưa quay)
+            ox = r * 0.52
             if eye_l and eye_r:
                 Color(1, 1, 1, 1)
-                Rectangle(texture=eye_l, pos=(hx - cell * 0.36, ey - es / 2), size=(es, es))
-                Rectangle(texture=eye_r, pos=(hx + cell * 0.36 - es, ey - es / 2), size=(es, es))
+                Rectangle(texture=eye_l, pos=(sx - ox - es / 2, ey - es / 2), size=(es, es))
+                Rectangle(texture=eye_r, pos=(sx + ox - es / 2, ey - es / 2), size=(es, es))
         PopMatrix()
-        Color(1, 1, 1, 1)  # reset màu
+        Color(1, 1, 1, 1)
 
     # ---------------- Điều khiển ----------------
-    def steer_towards(self, tx, ty):
+    def _aim_at(self, win_pos):
         if self.player is None or not self.player.alive:
             return
-        dx = tx - self.center_x
-        dy = ty - self.center_y
-        if abs(dx) > abs(dy):
-            self.player.set_input_direction(RIGHT if dx > 0 else LEFT)
-        else:
-            self.player.set_input_direction(UP if dy > 0 else DOWN)
+        dx = win_pos[0] - self.center_x
+        dy = win_pos[1] - self.center_y
+        if dx * dx + dy * dy > 4:
+            self.player.set_target_angle(math.atan2(dy, dx))
 
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
-            self.steer_towards(*touch.pos)
+            self._touch_steer = True
+            self._aim_at(touch.pos)
+            if getattr(touch, "button", None) == "left":
+                self._boost_sources.add("mouse")
             return True
         return super().on_touch_down(touch)
 
     def on_touch_move(self, touch):
         if self.collide_point(*touch.pos):
-            self.steer_towards(*touch.pos)
+            self._aim_at(touch.pos)
             return True
         return super().on_touch_move(touch)
 
-    _KEYCODES = {273: UP, 274: DOWN, 275: RIGHT, 276: LEFT}  # phím mũi tên
-    _KEYCHARS = {"w": UP, "s": DOWN, "a": LEFT, "d": RIGHT}
+    def on_touch_up(self, touch):
+        self._boost_sources.discard("mouse")
+        self._touch_steer = False
+        return super().on_touch_up(touch)
 
-    def _bind_keys(self):
-        Window.bind(on_key_down=self._on_key_down)
+    def set_boost(self, on, source="btn"):
+        if on:
+            self._boost_sources.add(source)
+        else:
+            self._boost_sources.discard(source)
 
-    def _unbind_keys(self):
-        Window.unbind(on_key_down=self._on_key_down)
+    def _bind_input(self):
+        Window.bind(on_key_down=self._on_key_down, on_key_up=self._on_key_up)
+
+    def _unbind_input(self):
+        Window.unbind(on_key_down=self._on_key_down, on_key_up=self._on_key_up)
 
     def _on_key_down(self, window, key, scancode, codepoint, modifiers):
-        d = self._KEYCODES.get(key)
-        if d is None and codepoint:
-            d = self._KEYCHARS.get(codepoint.lower())
-        if self.player and d:
-            self.player.set_input_direction(d)
+        if key == 32:  # Space
+            self._boost_sources.add("space")
+            return True
+        return False
+
+    def _on_key_up(self, window, key, scancode, codepoint):
+        if key == 32:
+            self._boost_sources.discard("space")
             return True
         return False
 
 
 class GameScreen(Screen):
-    """Màn chơi: GameWidget + vignette + HUD."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -420,24 +465,33 @@ class GameScreen(Screen):
         self.game = GameWidget(size_hint=(1, 1))
         root.add_widget(self.game)
 
-        # Lớp phủ vignette (làm tối viền) - không chặn chạm
         vig = assets.ui_path(config.UI["vignette"])
         if vig:
             root.add_widget(Image(source=vig, allow_stretch=True,
                                   keep_ratio=False, size_hint=(1, 1)))
 
-        # HUD trên cùng
-        top = BoxLayout(size_hint=(1, None), height=54, padding=10, spacing=10,
+        # HUD trên
+        top = BoxLayout(size_hint=(1, None), height=52, padding=8, spacing=8,
                         pos_hint={"top": 1})
-        self.lbl_score = Label(text="Điểm: 0", font_size=20, bold=True)
-        self.lbl_coins = Label(text="Coin: 0", font_size=20, bold=True)
-        self.lbl_bots = Label(text="Bot: 0", font_size=20, bold=True)
-        self.btn_pause = Button(text="II", size_hint=(None, 1), width=54,
+        self.lbl_score = Label(text="Điểm: 0", font_size=18, bold=True)
+        self.lbl_len = Label(text="Dài: 0", font_size=18, bold=True)
+        self.lbl_coins = Label(text="Coin: 0", font_size=18, bold=True)
+        self.lbl_bots = Label(text="Bot: 0", font_size=18, bold=True)
+        self.btn_pause = Button(text="II", size_hint=(None, 1), width=50,
                                 background_normal="", background_color=(0.2, 0.4, 0.9, 1))
         self.btn_pause.bind(on_release=self._on_pause)
-        for w in (self.lbl_score, self.lbl_coins, self.lbl_bots, self.btn_pause):
+        for w in (self.lbl_score, self.lbl_len, self.lbl_coins, self.lbl_bots, self.btn_pause):
             top.add_widget(w)
         root.add_widget(top)
+
+        # Nút BOOST (giữ để tăng tốc) - tiện cho cảm ứng
+        self.btn_boost = Button(text="BOOST", size_hint=(None, None), size=(96, 96),
+                                pos_hint={"right": 0.97, "y": 0.03},
+                                background_normal="", background_color=(0.95, 0.55, 0.2, 0.9),
+                                bold=True)
+        self.btn_boost.bind(on_press=lambda *a: self.game.set_boost(True),
+                            on_release=lambda *a: self.game.set_boost(False))
+        root.add_widget(self.btn_boost)
 
         # Lớp phủ tạm dừng
         self.pause_overlay = self._build_pause_overlay()
@@ -466,7 +520,6 @@ class GameScreen(Screen):
         box.add_widget(b_menu)
         return box
 
-    # ---------------- Vòng đời ----------------
     def on_enter(self, *args):
         app = self.manager.app
         self.game.reset(app.data, app.audio)
@@ -475,9 +528,9 @@ class GameScreen(Screen):
     def on_leave(self, *args):
         self.game.stop()
 
-    # ---------------- Sự kiện ----------------
-    def _update_hud(self, score, coins, bots_left):
+    def _update_hud(self, score, coins, length, bots_left):
         self.lbl_score.text = "Điểm: %d" % score
+        self.lbl_len.text = "Dài: %d" % length
         self.lbl_coins.text = "Coin: %d" % coins
         self.lbl_bots.text = "Bot: %d" % bots_left
 
@@ -500,4 +553,3 @@ class GameScreen(Screen):
     def _on_win(self, stats):
         self.manager.get_screen("game_win").set_stats(stats)
         self.manager.current = "game_win"
-
