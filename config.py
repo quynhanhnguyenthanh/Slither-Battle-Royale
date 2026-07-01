@@ -6,12 +6,12 @@ Tập trung mọi hằng số & bảng skin ở đây (Tính Module hóa).
 """
 
 # ---------- Kích thước thế giới (lưới - grid) ----------
-WORLD_W = 46
-WORLD_H = 46
+WORLD_W = 180
+WORLD_H = 180
 CELL = 28              # kích thước 1 ô (pixel) khi vẽ
 
 # ---------- Nhịp game ----------
-MOVE_INTERVAL = 0.12   # giây giữa 2 bước rắn (tốc độ)
+MOVE_INTERVAL = 1   # giây giữa 2 bước rắn (tốc độ)
 FPS = 60
 
 # ---------- Thiết lập màn chơi ----------
