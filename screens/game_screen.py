@@ -464,11 +464,6 @@ class GameScreen(Screen):
         self.game = GameWidget(size_hint=(1, 1))
         root.add_widget(self.game)
 
-        vig = assets.ui_path(config.UI["vignette"])
-        if vig:
-            root.add_widget(Image(source=vig, allow_stretch=True,
-                                  keep_ratio=False, size_hint=(1, 1)))
-
         # HUD trên
         top = BoxLayout(size_hint=(1, None), height=52, padding=8, spacing=8,
                         pos_hint={"top": 1})
