@@ -1,1 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+.buildozer/
+bin/
+game_data.json
 
