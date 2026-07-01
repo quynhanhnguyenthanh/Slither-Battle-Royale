@@ -58,6 +58,8 @@ class SkinRow(BoxLayout):
         return p if os.path.exists(p) else ""
 
     def refresh(self):
+        if self.screen.manager is None:
+            return
         data = self.screen.manager.app.data
         self.info.text = "%s\nGiá: %d coin" % (self.skin["name"], self.skin["price"])
         owned = data.owns_skin(self.skin["id"])
