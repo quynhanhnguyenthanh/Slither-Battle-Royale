@@ -2,9 +2,12 @@
 """
 utils/audio.py
 
-AudioManager: nạp & phát hiệu ứng âm thanh (.ogg trong assets/sounds).
-Ánh xạ sự kiện game -> file âm thanh thực có trong repo.
-Chống lỗi: thiếu file nào thì bỏ qua file đó, game vẫn chạy.
+AudioManager: hiệu ứng âm thanh (.ogg) + nhạc nền (nếu có file).
+Ánh xạ sự kiện game -> file thực trong assets/sounds. Thiếu file thì bỏ qua.
+
+Nhạc nền: bộ assets gốc KHÔNG kèm file nhạc nền. Nếu bạn thêm
+assets/sounds/bgm.ogg (hoặc music.ogg), game sẽ tự phát lặp và có thể
+bật/tắt trong màn Cài đặt.
 """
 
 import os
@@ -16,7 +19,6 @@ SOUND_DIR = os.path.join(BASE_DIR, "assets", "sounds")
 
 
 class AudioManager:
-    # Ánh xạ tên sự kiện trong game -> file .ogg thực tế
     SFX_FILES = {
         "eat": "alert_money.ogg",     # ăn mồi / nhận coin
         "die": "error_2.ogg",         # rắn chết
@@ -24,11 +26,15 @@ class AudioManager:
         "click": "button_up.ogg",     # bấm nút
         "navigate": "navigate.ogg",   # chuyển màn hình
         "kill": "whoosh.ogg",         # hạ được bot
+        "boost_on": "boost_start.ogg",  # bắt đầu tăng tốc
+        "boost_off": "boost_stop.ogg",  # ngừng tăng tốc
     }
+    MUSIC_CANDIDATES = ["bgm.ogg", "music.ogg", "background.ogg"]
 
     def __init__(self, data_manager):
         self.data = data_manager
         self._sfx = {}
+        self._music = None
         self._load_all()
 
     def _path(self, filename):
@@ -39,7 +45,15 @@ class AudioManager:
         for name, filename in self.SFX_FILES.items():
             path = self._path(filename)
             self._sfx[name] = SoundLoader.load(path) if path else None
+        for cand in self.MUSIC_CANDIDATES:
+            path = self._path(cand)
+            if path:
+                self._music = SoundLoader.load(path)
+                if self._music:
+                    self._music.loop = True
+                    break
 
+    # ---------------- Hiệu ứng ----------------
     def play_sfx(self, name):
         if not self.data.is_sfx_on():
             return
@@ -49,12 +63,23 @@ class AudioManager:
             sound.stop()
             sound.play()
 
-    # Giữ API tương thích với phần còn lại (không có nhạc nền trong bộ assets)
+    # ---------------- Nhạc nền ----------------
     def play_music(self):
-        pass
+        if self._music and self.data.is_music_on():
+            self._music.volume = self.data.get_volume() * 0.6
+            if self._music.state != "play":
+                self._music.play()
 
     def stop_music(self):
-        pass
+        if self._music and self._music.state == "play":
+            self._music.stop()
+
+    def apply_music_setting(self):
+        if self.data.is_music_on():
+            self.play_music()
+        else:
+            self.stop_music()
 
     def apply_volume(self):
-        pass
+        if self._music:
+            self._music.volume = self.data.get_volume() * 0.6
