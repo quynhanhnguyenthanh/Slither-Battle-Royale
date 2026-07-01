@@ -1,8 +1,14 @@
 import os
+import sys
 import subprocess
 import tempfile
-import av
-import numpy as np
+
+try:
+    import av
+    import numpy as np
+    _HAV_AV = True
+except ImportError:
+    _HAV_AV = False
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOUND_DIR = os.path.join(BASE_DIR, "assets", "sounds")
@@ -20,6 +26,8 @@ SFX_FILES = {
 
 
 def _decode_ogg(path):
+    if not _HAV_AV:
+        return None, 0, 0
     container = av.open(path)
     stream = container.streams.audio[0]
     codec = stream.codec_context
@@ -53,11 +61,21 @@ def _pcm_to_wav(pcm, channels, sample_rate):
     return header + pcm_bytes
 
 
+def _detect_platform():
+    try:
+        from kivy.utils import platform
+        return platform
+    except ImportError:
+        return sys.platform
+
+
 class AudioManager:
     def __init__(self, data_manager):
         self.data = data_manager
         self._sfx = {}
+        self._sfx_pcm = {}
         self._processes = []
+        self._platform = _detect_platform()
         self._load_all()
 
     def _path(self, filename):
@@ -65,57 +83,70 @@ class AudioManager:
         return p if os.path.exists(p) else ""
 
     def _load_all(self):
-        for name, filename in SFX_FILES.items():
-            path = self._path(filename)
-            if not path:
-                self._sfx[name] = None
-                continue
-            try:
-                pcm, rate, ch = _decode_ogg(path)
-                self._sfx[name] = (pcm, rate, ch)
-            except Exception:
-                self._sfx[name] = None
-
-    def _cleanup(self):
-        still = []
-        for proc, name in self._processes:
-            if proc.poll() is not None:
+        if self._platform == "android":
+            for name, filename in SFX_FILES.items():
+                path = self._path(filename)
+                self._sfx[name] = path if path else None
+        else:
+            for name, filename in SFX_FILES.items():
+                path = self._path(filename)
+                if not path:
+                    self._sfx_pcm[name] = None
+                    continue
                 try:
-                    os.unlink(name)
+                    pcm, rate, ch = _decode_ogg(path)
+                    self._sfx_pcm[name] = (pcm, rate, ch)
                 except Exception:
-                    pass
-            else:
-                still.append((proc, name))
-        self._processes = still
-
-    def _apply_volume(self, pcm, volume):
-        if volume >= 1.0:
-            return pcm
-        return pcm * volume
+                    self._sfx_pcm[name] = None
 
     def play_sfx(self, name):
         if not self.data.is_sfx_on():
             return
-        entry = self._sfx.get(name)
-        if entry is None:
-            return
-        pcm, rate, ch = entry
         vol = self.data.get_volume()
         if vol <= 0:
             return
+
+        if self._platform == "android":
+            self._play_android(name, vol)
+        else:
+            self._play_macos(name, vol)
+
+    def _play_android(self, name, vol):
+        path = self._sfx.get(name)
+        if not path:
+            return
         try:
-            scaled = self._apply_volume(pcm, vol)
+            from kivy.core.audio import SoundLoader
+            sound = SoundLoader.load(path)
+            if sound:
+                sound.volume = vol
+                sound.play()
+        except Exception:
+            pass
+
+    def _play_macos(self, name, vol):
+        entry = self._sfx_pcm.get(name)
+        if entry is None:
+            return
+        pcm, rate, ch = entry
+        try:
+            scaled = pcm * vol if vol < 1.0 else pcm
             wav = _pcm_to_wav(scaled, ch, rate)
             tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             tmp.write(wav)
             tmp.close()
-            subprocess.Popen(["afplay", tmp.name],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL)
+            proc = subprocess.Popen(
+                ["afplay", tmp.name],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            self._processes.append((proc, tmp.name))
         except Exception:
             pass
 
     def stop_music(self):
+        if self._platform == "android":
+            return
         for proc, name in self._processes:
             try:
                 proc.terminate()
