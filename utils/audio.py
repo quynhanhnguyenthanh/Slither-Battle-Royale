@@ -1,85 +1,137 @@
-# -*- coding: utf-8 -*-
-"""
-utils/audio.py
-
-AudioManager: hiệu ứng âm thanh (.ogg) + nhạc nền (nếu có file).
-Ánh xạ sự kiện game -> file thực trong assets/sounds. Thiếu file thì bỏ qua.
-
-Nhạc nền: bộ assets gốc KHÔNG kèm file nhạc nền. Nếu bạn thêm
-assets/sounds/bgm.ogg (hoặc music.ogg), game sẽ tự phát lặp và có thể
-bật/tắt trong màn Cài đặt.
-"""
-
 import os
-from kivy.core.audio import SoundLoader
-from kivy.resources import resource_find
+import subprocess
+import tempfile
+import av
+import numpy as np
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOUND_DIR = os.path.join(BASE_DIR, "assets", "sounds")
 
+SFX_FILES = {
+    "eat": "alert_money.ogg",
+    "die": "error_2.ogg",
+    "win": "start_game.ogg",
+    "click": "button_up.ogg",
+    "navigate": "navigate.ogg",
+    "kill": "whoosh.ogg",
+    "boost_on": "boost_start.ogg",
+    "boost_off": "boost_stop.ogg",
+}
+
+
+def _decode_ogg(path):
+    container = av.open(path)
+    stream = container.streams.audio[0]
+    codec = stream.codec_context
+    rate = codec.sample_rate
+    ch = codec.channels
+    frames = []
+    for frame in container.decode(audio=0):
+        arr = frame.to_ndarray()
+        frames.append(arr)
+    container.close()
+    if not frames:
+        return None, 0, 0
+    data = np.concatenate(frames, axis=1) if frames[0].ndim > 1 else np.concatenate(frames)
+    if data.ndim > 1:
+        data = data.T.ravel()
+    return data, rate, ch
+
+
+def _pcm_to_wav(pcm, channels, sample_rate):
+    pcm_bytes = (pcm * 32767).clip(-32768, 32767).astype(np.int16).tobytes()
+    import struct
+    data_size = len(pcm_bytes)
+    header = struct.pack(
+        "<4sI4s4sIHHIIHH",
+        b"RIFF", 36 + data_size, b"WAVE",
+        b"fmt ", 16, 1, channels,
+        sample_rate, sample_rate * channels * 2,
+        channels * 2, 16,
+    )
+    header += struct.pack("<4sI", b"data", data_size)
+    return header + pcm_bytes
+
 
 class AudioManager:
-    SFX_FILES = {
-        "eat": "alert_money.ogg",     # ăn mồi / nhận coin
-        "die": "error_2.ogg",         # rắn chết
-        "win": "start_game.ogg",      # chiến thắng
-        "click": "button_up.ogg",     # bấm nút
-        "navigate": "navigate.ogg",   # chuyển màn hình
-        "kill": "whoosh.ogg",         # hạ được bot
-        "boost_on": "boost_start.ogg",  # bắt đầu tăng tốc
-        "boost_off": "boost_stop.ogg",  # ngừng tăng tốc
-    }
-    MUSIC_CANDIDATES = ["bgm.ogg", "music.ogg", "background.ogg"]
-
     def __init__(self, data_manager):
         self.data = data_manager
         self._sfx = {}
-        self._music = None
+        self._processes = []
         self._load_all()
 
     def _path(self, filename):
         p = os.path.join(SOUND_DIR, filename)
-        return p if os.path.exists(p) else (resource_find(filename) or "")
+        return p if os.path.exists(p) else ""
 
     def _load_all(self):
-        for name, filename in self.SFX_FILES.items():
+        for name, filename in SFX_FILES.items():
             path = self._path(filename)
-            self._sfx[name] = SoundLoader.load(path) if path else None
-        for cand in self.MUSIC_CANDIDATES:
-            path = self._path(cand)
-            if path:
-                self._music = SoundLoader.load(path)
-                if self._music:
-                    self._music.loop = True
-                    break
+            if not path:
+                self._sfx[name] = None
+                continue
+            try:
+                pcm, rate, ch = _decode_ogg(path)
+                self._sfx[name] = (pcm, rate, ch)
+            except Exception:
+                self._sfx[name] = None
 
-    # ---------------- Hiệu ứng ----------------
+    def _cleanup(self):
+        still = []
+        for proc, name in self._processes:
+            if proc.poll() is not None:
+                try:
+                    os.unlink(name)
+                except Exception:
+                    pass
+            else:
+                still.append((proc, name))
+        self._processes = still
+
+    def _apply_volume(self, pcm, volume):
+        if volume >= 1.0:
+            return pcm
+        return pcm * volume
+
     def play_sfx(self, name):
         if not self.data.is_sfx_on():
             return
-        sound = self._sfx.get(name)
-        if sound:
-            sound.volume = self.data.get_volume()
-            sound.stop()
-            sound.play()
-
-    # ---------------- Nhạc nền ----------------
-    def play_music(self):
-        if self._music and self.data.is_music_on():
-            self._music.volume = self.data.get_volume() * 0.6
-            if self._music.state != "play":
-                self._music.play()
+        entry = self._sfx.get(name)
+        if entry is None:
+            return
+        pcm, rate, ch = entry
+        vol = self.data.get_volume()
+        if vol <= 0:
+            return
+        try:
+            scaled = self._apply_volume(pcm, vol)
+            wav = _pcm_to_wav(scaled, ch, rate)
+            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            tmp.write(wav)
+            tmp.close()
+            subprocess.Popen(["afplay", tmp.name],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
 
     def stop_music(self):
-        if self._music and self._music.state == "play":
-            self._music.stop()
+        for proc, name in self._processes:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+            try:
+                os.unlink(name)
+            except Exception:
+                pass
+        self._processes.clear()
+
+    def play_music(self):
+        pass
 
     def apply_music_setting(self):
-        if self.data.is_music_on():
-            self.play_music()
-        else:
-            self.stop_music()
+        pass
 
     def apply_volume(self):
-        if self._music:
-            self._music.volume = self.data.get_volume() * 0.6
+        pass
