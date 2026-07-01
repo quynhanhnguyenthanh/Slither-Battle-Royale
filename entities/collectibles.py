@@ -2,28 +2,25 @@
 """
 entities/collectibles.py
 
-Vật phẩm thu thập trên bản đồ:
-  - Food : mồi thường, xuất hiện ngẫu nhiên.
-  - Loot : mồi lớn RỚT RA từ xác con rắn chết (kế thừa Food).
-
-Minh hoạ KHỞI TẠO ĐỐI TƯỢNG và KẾ THỪA ở quy mô nhỏ.
-Được vẽ bằng sprite ui/circle.png (tô màu theo thuộc tính color).
+Vật phẩm trên bản đồ (toạ độ thực, liên tục):
+  - Food: hạt mồi thường.
+  - Loot: hạt lớn rơi ra từ xác rắn chết (kế thừa Food).
 """
 
 import config
 
 
 class Food:
-    """Mồi thường: cho điểm và coin khi bị ăn."""
-
     def __init__(self, x, y, score=config.FOOD_SCORE, coin=config.FOOD_COIN,
-                 color=config.COLOR_FOOD, radius_ratio=0.34):
-        self.x = x
-        self.y = y
+                 color=config.COLOR_FOOD, radius=config.FOOD_RADIUS,
+                 grow=config.GROW_PER_FOOD):
+        self.x = float(x)
+        self.y = float(y)
         self.score = score
         self.coin = coin
         self.color = color
-        self.radius_ratio = radius_ratio  # bán kính vẽ so với ô
+        self.radius = radius
+        self.grow = grow
 
     @property
     def pos(self):
@@ -31,7 +28,7 @@ class Food:
 
 
 class Loot(Food):
-    """Mồi loot: to hơn, giá trị cao hơn, rơi ra từ thân rắn đã chết."""
+    """Mồi lớn từ xác rắn: giá trị cao hơn, to hơn."""
 
     def __init__(self, x, y):
         super().__init__(
@@ -39,5 +36,6 @@ class Loot(Food):
             score=config.LOOT_SCORE,
             coin=config.LOOT_COIN,
             color=config.COLOR_LOOT,
-            radius_ratio=0.46,
+            radius=config.LOOT_RADIUS,
+            grow=config.GROW_PER_LOOT,
         )
