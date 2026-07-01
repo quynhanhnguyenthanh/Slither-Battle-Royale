@@ -6,17 +6,17 @@ Tập trung mọi hằng số & bảng skin ở đây (Tính Module hóa).
 """
 
 # ---------- Kích thước thế giới (lưới - grid) ----------
-WORLD_W = 180
-WORLD_H = 180
+WORLD_W = 72
+WORLD_H = 72
 CELL = 28              # kích thước 1 ô (pixel) khi vẽ
 
 # ---------- Nhịp game ----------
-MOVE_INTERVAL = 1   # giây giữa 2 bước rắn (tốc độ)
+MOVE_INTERVAL = 0.18   # giây giữa 2 bước rắn (số lớn hơn = rắn chạy chậm hơn)
 FPS = 60
 
 # ---------- Thiết lập màn chơi ----------
-NUM_BOTS = 5
-FOOD_COUNT = 40
+NUM_BOTS = 8
+FOOD_COUNT = 90
 START_LENGTH = 4
 
 # ---------- Phần thưởng ----------
