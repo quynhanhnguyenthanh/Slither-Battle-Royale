@@ -9,7 +9,7 @@ PHIÊN BẢN CHUYỂN ĐỘNG LIÊN TỤC 360° (giống slither.io).
 import math
 
 # ---------- Sân chơi (hình tròn, giống slither.io) ----------
-ARENA_RADIUS = 1700.0        # bán kính sân (px thế giới)
+ARENA_RADIUS = 3400.0        # bán kính sân (px thế giới)
 BG_GRID = 64                 # bước lưới nền (px)
 
 # ---------- Vật lý rắn ----------
@@ -47,7 +47,7 @@ LOOT_SCORE = 3
 LOOT_COIN = 2
 
 # ---------- Đối thủ (bot) ----------
-NUM_BOTS = 10
+NUM_BOTS = 20
 KILL_BONUS_COIN = 10
 
 FPS = 60

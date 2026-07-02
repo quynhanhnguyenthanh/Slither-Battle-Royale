@@ -187,6 +187,7 @@ class GameWidget(Widget):
         for s in dead:
             s.die()
             self._drop_loot(s)
+            self.audio.play_sfx("loot")
             if s is not self.player:
                 self.snakes.remove(s)
                 self.bots_killed += 1
@@ -553,6 +554,10 @@ class GameScreen(Screen):
         paused = self.game.toggle_pause()
         self.pause_overlay.opacity = 1 if paused else 0
         self.pause_overlay.disabled = not paused
+        if paused:
+            self.manager.app.audio.play_sfx("pause")
+        else:
+            self.manager.app.audio.play_sfx("resume")
 
     def _go_menu(self, *args):
         self.game.stop()
