@@ -478,7 +478,12 @@ class GameScreen(Screen):
                               )
         self.btn_pause = Button(text="II", size_hint=(None, 1), width=56,
                                 background_normal="",
-                                background_color=(0.2, 0.4, 0.9, 1))
+                                background_color=(0, 0, 0, 0))
+        with self.btn_pause.canvas.before:
+            Color(0.2, 0.4, 0.9, 1)
+            rp = RoundedRectangle(pos=self.btn_pause.pos, size=self.btn_pause.size, radius=[10,])
+        self.btn_pause.bind(pos=lambda i, v, r=rp: setattr(r, 'pos', v),
+                            size=lambda i, v, r=rp: setattr(r, 'size', v))
         self.btn_pause.bind(on_release=self._on_pause)
         for w in (self.lbl_score, self.lbl_len, self.lbl_coins, self.lbl_bots, self.btn_pause):
             top.add_widget(w)
@@ -489,8 +494,13 @@ class GameScreen(Screen):
                                 pos_hint={"right": 0.97, "y": 0.03},
                                 font_size=18,
                                 background_normal="",
-                                background_color=(0.95, 0.55, 0.2, 0.9),
+                                background_color=(0, 0, 0, 0),
                                 bold=True)
+        with self.btn_boost.canvas.before:
+            Color(0.95, 0.55, 0.2, 0.9)
+            rb = RoundedRectangle(pos=self.btn_boost.pos, size=self.btn_boost.size, radius=[16,])
+        self.btn_boost.bind(pos=lambda i, v, r=rb: setattr(r, 'pos', v),
+                            size=lambda i, v, r=rb: setattr(r, 'size', v))
         self.btn_boost.bind(on_press=lambda *a: self.game.set_boost(True),
                             on_release=lambda *a: self.game.set_boost(False))
         root.add_widget(self.btn_boost)

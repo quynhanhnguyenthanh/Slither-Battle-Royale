@@ -12,7 +12,7 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.image import Image
-from kivy.graphics import Color, Rectangle
+from kivy.graphics import Color, Rectangle, RoundedRectangle
 
 try:
     from kivy.uix.video import Video
@@ -142,8 +142,13 @@ class MainMenuScreen(Screen):
             bold=True,
             size_hint=(1, 0.13),
             background_normal="",
-            background_color=color,
+            background_color=(0, 0, 0, 0),
         )
+        with b.canvas.before:
+            Color(*color)
+            rect = RoundedRectangle(pos=b.pos, size=b.size, radius=[14,])
+        b.bind(pos=lambda i, v, r=rect: setattr(r, 'pos', v),
+               size=lambda i, v, r=rect: setattr(r, 'size', v))
         b.bind(on_release=cb)
         return b
 

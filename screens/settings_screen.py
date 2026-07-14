@@ -11,6 +11,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.slider import Slider
+from kivy.graphics import Color, RoundedRectangle
 
 
 class SettingsScreen(Screen):
@@ -28,13 +29,24 @@ class SettingsScreen(Screen):
         box.add_widget(self.slider)
 
         self.btn_sfx = Button(text="", font_size=20, size_hint=(1, 0.15),
-                              background_normal="")
+                              background_normal="", background_color=(0, 0, 0, 0))
         self.btn_sfx.bind(on_release=self._toggle_sfx)
+        with self.btn_sfx.canvas.before:
+            self._sfx_color = Color(0.2, 0.7, 0.3, 1)
+            self._sfx_rect = RoundedRectangle(pos=self.btn_sfx.pos,
+                                               size=self.btn_sfx.size, radius=[14,])
+        self.btn_sfx.bind(pos=lambda i, v, r=self._sfx_rect: setattr(r, 'pos', v),
+                          size=lambda i, v, r=self._sfx_rect: setattr(r, 'size', v))
         box.add_widget(self.btn_sfx)
 
         back = Button(text="Quay lại", font_size=20, bold=True,
                       size_hint=(1, 0.15), background_normal="",
-                      background_color=(0.3, 0.55, 0.95, 1))
+                      background_color=(0, 0, 0, 0))
+        with back.canvas.before:
+            Color(0.3, 0.55, 0.95, 1)
+            r = RoundedRectangle(pos=back.pos, size=back.size, radius=[14,])
+        back.bind(pos=lambda i, v, rect=r: setattr(rect, 'pos', v),
+                  size=lambda i, v, rect=r: setattr(rect, 'size', v))
         back.bind(on_release=self._back)
         box.add_widget(back)
 
@@ -55,12 +67,10 @@ class SettingsScreen(Screen):
         app.audio.play_sfx("click")
         self._refresh_sfx_label()
 
-
     def _refresh_sfx_label(self):
         on = self.manager.app.data.is_sfx_on()
         self.btn_sfx.text = "Hiệu ứng: %s" % ("BẬT" if on else "TẮT")
-        self.btn_sfx.background_color = (0.2, 0.7, 0.3, 1) if on else (0.6, 0.3, 0.3, 1)
-
+        self._sfx_color.rgb = (0.2, 0.7, 0.3) if on else (0.6, 0.3, 0.3)
 
     def _back(self, *a):
         self.manager.app.audio.play_sfx("click")
