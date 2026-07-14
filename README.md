@@ -16,7 +16,7 @@ python main.py
   Khi tăng tốc rắn **ngắn dần** và có **vệt sáng ở đuôi**.
 - **Tạm dừng:** nút **II** ở góc trên.
 
-## ✅ Các tính năng (theo yêu cầu)
+## ✅ Các tính năng 
 | Yêu cầu | Cài đặt trong code |
 |---|---|
 | Di chuyển mượt 360° bám con trỏ (như slither.io) | `BaseSnake._turn_toward` + `TURN_RATE`, lái theo `Window.mouse_pos` trong `GameWidget.update` |
@@ -29,10 +29,6 @@ python main.py
 | Cửa hàng mua/đổi skin bằng coin | `ShopScreen` |
 | Âm thanh (nhạc nền, ăn mồi) + hiệu ứng (vệt sáng) + bật/tắt ở Cài đặt | `AudioManager`, vệt sáng `blur.png` khi boost, `SettingsScreen` (bật/tắt hiệu ứng & nhạc) |
 
-> **Lưu ý nhạc nền:** bộ assets gốc **không kèm file nhạc nền**. Game đã có sẵn cơ chế:
-> chỉ cần bỏ một file `assets/sounds/bgm.ogg` (hoặc `music.ogg`) vào là nhạc tự phát lặp
-> và có thể bật/tắt trong màn Cài đặt. Tiếng ăn mồi/tăng tốc/va chạm dùng file .ogg có sẵn.
-
 ## 📁 Cấu trúc
 ```
 main.py                # Khởi chạy + ScreenManager
@@ -43,7 +39,7 @@ screens/  main_menu  game_screen  shop_screen  settings_screen  result_screens
 assets/  images/skins  images/ui  sounds
 ```
 
-## 🎯 Bản đồ OOP (cho báo cáo)
+## 🎯 Bản đồ OOP 
 - **Đóng gói:** `DataManager` giấu `_data`, truy cập qua get/set an toàn (tự lưu file).
 - **Kế thừa:** `PlayerSnake`/`BotSnake` ← `BaseSnake`; `Loot` ← `Food`; các màn ← `Screen`.
 - **Đa hình:** `update_direction()` — Player lái theo con trỏ, Bot lái theo AI, gọi chung một tên.

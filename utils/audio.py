@@ -1,3 +1,11 @@
+# -*- coding: utf-8 -*-
+"""
+utils/audio.py
+
+AudioManager: hiệu ứng âm thanh (.ogg), chạy cross-platform.
+macOS: afplay | Windows: winsound | Android: Kivy SoundLoader
+"""
+
 import os
 import sys
 import subprocess
@@ -47,8 +55,8 @@ def _decode_ogg(path):
 
 
 def _pcm_to_wav(pcm, channels, sample_rate):
-    pcm_bytes = (pcm * 32767).clip(-32768, 32767).astype(np.int16).tobytes()
     import struct
+    pcm_bytes = (pcm * 32767).clip(-32768, 32767).astype(np.int16).tobytes()
     data_size = len(pcm_bytes)
     header = struct.pack(
         "<4sI4s4sIHHIIHH",
@@ -105,7 +113,6 @@ class AudioManager:
         vol = self.data.get_volume()
         if vol <= 0:
             return
-
         if self._platform == "android":
             self._play_android(name, vol)
         else:
@@ -150,7 +157,7 @@ class AudioManager:
         except Exception:
             pass
 
-    def stop_music(self):
+    def stop_all(self):
         if self._platform == "android":
             return
         for proc, name in self._processes:
@@ -169,12 +176,3 @@ class AudioManager:
                 winsound.PlaySound(None, winsound.SND_PURGE)
             except Exception:
                 pass
-
-    def play_music(self):
-        pass
-
-    def apply_music_setting(self):
-        pass
-
-    def apply_volume(self):
-        pass
