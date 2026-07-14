@@ -2,84 +2,177 @@
 """
 utils/audio.py
 
-AudioManager: hiệu ứng âm thanh (.ogg) + nhạc nền (nếu có file).
-Ánh xạ sự kiện game -> file thực trong assets/sounds. Thiếu file thì bỏ qua.
-
-Nhạc nền: bộ assets gốc KHÔNG kèm file nhạc nền. Nếu bạn thêm
-assets/sounds/bgm.ogg (hoặc music.ogg), game sẽ tự phát lặp và có thể
-bật/tắt trong màn Cài đặt.
+AudioManager: hiệu ứng âm thanh (.ogg), chạy cross-platform.
+macOS: afplay | Windows: winsound | Android: Kivy SoundLoader
 """
 
 import os
-from kivy.core.audio import SoundLoader
-from kivy.resources import resource_find
+import sys
+import subprocess
+import tempfile
+
+try:
+    import av
+    import numpy as np
+    _HAV_AV = True
+except ImportError:
+    _HAV_AV = False
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOUND_DIR = os.path.join(BASE_DIR, "assets", "sounds")
 
+SFX_FILES = {
+    "eat": "alert_money.ogg",
+    "die": "error_2.ogg",
+    "win": "start_game.ogg",
+    "click": "button_up.ogg",
+    "navigate": "navigate.ogg",
+    "kill": "whoosh.ogg",
+    "boost_on": "boost_start.ogg",
+    "boost_off": "boost_stop.ogg",
+}
+
+
+def _decode_ogg(path):
+    if not _HAV_AV:
+        return None, 0, 0
+    container = av.open(path)
+    stream = container.streams.audio[0]
+    codec = stream.codec_context
+    rate = codec.sample_rate
+    ch = codec.channels
+    frames = []
+    for frame in container.decode(audio=0):
+        arr = frame.to_ndarray()
+        frames.append(arr)
+    container.close()
+    if not frames:
+        return None, 0, 0
+    data = np.concatenate(frames, axis=1) if frames[0].ndim > 1 else np.concatenate(frames)
+    if data.ndim > 1:
+        data = data.T.ravel()
+    return data, rate, ch
+
+
+def _pcm_to_wav(pcm, channels, sample_rate):
+    import struct
+    pcm_bytes = (pcm * 32767).clip(-32768, 32767).astype(np.int16).tobytes()
+    data_size = len(pcm_bytes)
+    header = struct.pack(
+        "<4sI4s4sIHHIIHH",
+        b"RIFF", 36 + data_size, b"WAVE",
+        b"fmt ", 16, 1, channels,
+        sample_rate, sample_rate * channels * 2,
+        channels * 2, 16,
+    )
+    header += struct.pack("<4sI", b"data", data_size)
+    return header + pcm_bytes
+
+
+def _detect_platform():
+    try:
+        from kivy.utils import platform
+        return platform
+    except ImportError:
+        return sys.platform
+
 
 class AudioManager:
-    SFX_FILES = {
-        "eat": "alert_money.ogg",     # ăn mồi / nhận coin
-        "die": "error_2.ogg",         # rắn chết
-        "win": "start_game.ogg",      # chiến thắng
-        "click": "button_up.ogg",     # bấm nút
-        "navigate": "navigate.ogg",   # chuyển màn hình
-        "kill": "whoosh.ogg",         # hạ được bot
-        "boost_on": "boost_start.ogg",  # bắt đầu tăng tốc
-        "boost_off": "boost_stop.ogg",  # ngừng tăng tốc
-    }
-    MUSIC_CANDIDATES = ["bgm.ogg", "music.ogg", "background.ogg"]
-
     def __init__(self, data_manager):
         self.data = data_manager
         self._sfx = {}
-        self._music = None
+        self._sfx_pcm = {}
+        self._processes = []
+        self._platform = _detect_platform()
         self._load_all()
 
     def _path(self, filename):
         p = os.path.join(SOUND_DIR, filename)
-        return p if os.path.exists(p) else (resource_find(filename) or "")
+        return p if os.path.exists(p) else ""
 
     def _load_all(self):
-        for name, filename in self.SFX_FILES.items():
-            path = self._path(filename)
-            self._sfx[name] = SoundLoader.load(path) if path else None
-        for cand in self.MUSIC_CANDIDATES:
-            path = self._path(cand)
-            if path:
-                self._music = SoundLoader.load(path)
-                if self._music:
-                    self._music.loop = True
-                    break
+        if self._platform == "android":
+            for name, filename in SFX_FILES.items():
+                path = self._path(filename)
+                self._sfx[name] = path if path else None
+        else:
+            for name, filename in SFX_FILES.items():
+                path = self._path(filename)
+                if not path:
+                    self._sfx_pcm[name] = None
+                    continue
+                try:
+                    pcm, rate, ch = _decode_ogg(path)
+                    self._sfx_pcm[name] = (pcm, rate, ch)
+                except Exception:
+                    self._sfx_pcm[name] = None
 
-    # ---------------- Hiệu ứng ----------------
     def play_sfx(self, name):
         if not self.data.is_sfx_on():
             return
-        sound = self._sfx.get(name)
-        if sound:
-            sound.volume = self.data.get_volume()
-            sound.stop()
-            sound.play()
-
-    # ---------------- Nhạc nền ----------------
-    def play_music(self):
-        if self._music and self.data.is_music_on():
-            self._music.volume = self.data.get_volume() * 0.6
-            if self._music.state != "play":
-                self._music.play()
-
-    def stop_music(self):
-        if self._music and self._music.state == "play":
-            self._music.stop()
-
-    def apply_music_setting(self):
-        if self.data.is_music_on():
-            self.play_music()
+        vol = self.data.get_volume()
+        if vol <= 0:
+            return
+        if self._platform == "android":
+            self._play_android(name, vol)
         else:
-            self.stop_music()
+            self._play_desktop(name, vol)
 
-    def apply_volume(self):
-        if self._music:
-            self._music.volume = self.data.get_volume() * 0.6
+    def _play_android(self, name, vol):
+        path = self._sfx.get(name)
+        if not path:
+            return
+        try:
+            from kivy.core.audio import SoundLoader
+            sound = SoundLoader.load(path)
+            if sound:
+                sound.volume = vol
+                sound.play()
+        except Exception:
+            pass
+
+    def _play_desktop(self, name, vol):
+        entry = self._sfx_pcm.get(name)
+        if entry is None:
+            return
+        pcm, rate, ch = entry
+        try:
+            scaled = pcm * vol if vol < 1.0 else pcm
+            wav = _pcm_to_wav(scaled, ch, rate)
+
+            if sys.platform == "win32":
+                import winsound
+                winsound.PlaySound(wav, winsound.SND_MEMORY | winsound.SND_ASYNC)
+            else:
+                tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+                tmp.write(wav)
+                tmp.close()
+                cmd = "aplay" if sys.platform == "linux" else "afplay"
+                proc = subprocess.Popen(
+                    [cmd, tmp.name],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                self._processes.append((proc, tmp.name))
+        except Exception:
+            pass
+
+    def stop_all(self):
+        if self._platform == "android":
+            return
+        for proc, name in self._processes:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+            try:
+                os.unlink(name)
+            except Exception:
+                pass
+        self._processes.clear()
+        if sys.platform == "win32":
+            try:
+                import winsound
+                winsound.PlaySound(None, winsound.SND_PURGE)
+            except Exception:
+                pass

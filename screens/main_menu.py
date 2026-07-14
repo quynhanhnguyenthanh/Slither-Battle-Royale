@@ -12,8 +12,13 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.image import Image
-from kivy.uix.video import Video
 from kivy.graphics import Color, Rectangle
+
+try:
+    from kivy.uix.video import Video
+    _HAS_VIDEO = True
+except Exception:
+    _HAS_VIDEO = False
 
 import config
 from utils import assets
@@ -30,18 +35,21 @@ class MainMenuScreen(Screen):
         # VIDEO BACKGROUND
         # ==========================
 
-        self.video = Video(
-            source="assets/video/menu_background.mp4",
-            state="play",
-            options={"eos": "loop"},
-            size_hint=(1, 1),
-            pos_hint={"x": 0, "y": 0},
-        )
-
-        self.video.allow_stretch = True
-        self.video.keep_ratio = False
-
-        root.add_widget(self.video)
+        self.video = None
+        if _HAS_VIDEO:
+            try:
+                self.video = Video(
+                    source="assets/video/menu_background.mp4",
+                    state="play",
+                    options={"eos": "loop"},
+                    size_hint=(1, 1),
+                    pos_hint={"x": 0, "y": 0},
+                )
+                self.video.allow_stretch = True
+                self.video.keep_ratio = False
+                root.add_widget(self.video)
+            except Exception:
+                self.video = None
 
         # ==========================
         # MENU
@@ -146,10 +154,12 @@ class MainMenuScreen(Screen):
             data.get_coins(),
         )
 
-        self.video.state = "play"
+        if self.video:
+            self.video.state = "play"
 
     def on_leave(self, *args):
-        self.video.state = "stop"
+        if self.video:
+            self.video.state = "stop"
 
     def _play(self, *a):
         self.manager.app.audio.play_sfx("click")
