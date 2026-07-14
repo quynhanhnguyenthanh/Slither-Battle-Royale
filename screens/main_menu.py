@@ -17,7 +17,11 @@ from kivy.graphics import Color, Rectangle, RoundedRectangle
 import config
 from utils import assets
 
-import av
+try:
+    import av
+except ImportError:
+    av = None
+
 from kivy.clock import Clock
 from kivy.graphics.texture import Texture
 
@@ -25,6 +29,8 @@ from kivy.graphics.texture import Texture
 class VideoBackground:
 
     def __init__(self, path, target_size=(420, 740), fps=15):
+        if av is None:
+            raise RuntimeError("av (PyAV) not installed")
         self._container = av.open(path)
         self._stream = self._container.streams.video[0]
         self._fps = fps

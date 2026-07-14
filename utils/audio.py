@@ -109,7 +109,7 @@ class AudioManager:
         if self._platform == "android":
             self._play_android(name, vol)
         else:
-            self._play_macos(name, vol)
+            self._play_desktop(name, vol)
 
     def _play_android(self, name, vol):
         path = self._sfx.get(name)
@@ -124,7 +124,7 @@ class AudioManager:
         except Exception:
             pass
 
-    def _play_macos(self, name, vol):
+    def _play_desktop(self, name, vol):
         entry = self._sfx_pcm.get(name)
         if entry is None:
             return
@@ -132,15 +132,21 @@ class AudioManager:
         try:
             scaled = pcm * vol if vol < 1.0 else pcm
             wav = _pcm_to_wav(scaled, ch, rate)
-            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            tmp.write(wav)
-            tmp.close()
-            proc = subprocess.Popen(
-                ["afplay", tmp.name],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            self._processes.append((proc, tmp.name))
+
+            if sys.platform == "win32":
+                import winsound
+                winsound.PlaySound(wav, winsound.SND_MEMORY | winsound.SND_ASYNC)
+            else:
+                tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+                tmp.write(wav)
+                tmp.close()
+                cmd = "aplay" if sys.platform == "linux" else "afplay"
+                proc = subprocess.Popen(
+                    [cmd, tmp.name],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                self._processes.append((proc, tmp.name))
         except Exception:
             pass
 
@@ -157,6 +163,12 @@ class AudioManager:
             except Exception:
                 pass
         self._processes.clear()
+        if sys.platform == "win32":
+            try:
+                import winsound
+                winsound.PlaySound(None, winsound.SND_PURGE)
+            except Exception:
+                pass
 
     def play_music(self):
         pass
