@@ -1,16 +1,22 @@
-# -*- coding: utf-8 -*-
-"""
-screens/result_screens.py
-
-GameOverScreen (Thua) và GameWinScreen (Thắng).
-Cả hai dùng chung một lớp cha ResultScreen -> tái sử dụng component,
-chỉ khác tiêu đề và màu sắc (một dạng "khác biệt hoá" qua kế thừa).
-"""
-
 from kivy.uix.screenmanager import Screen
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
+from kivy.graphics import Color, RoundedRectangle
+
+import config
+
+
+def _rounded_btn(text, font_size, bg_color, cb, **kw):
+    b = Button(text=text, font_size=font_size, bold=True,
+               background_normal="", background_color=(0, 0, 0, 0), **kw)
+    with b.canvas.before:
+        Color(*bg_color)
+        rect = RoundedRectangle(pos=b.pos, size=b.size, radius=[14,])
+    b.bind(pos=lambda i, v, r=rect: setattr(r, 'pos', v),
+           size=lambda i, v, r=rect: setattr(r, 'size', v))
+    b.bind(on_release=cb)
+    return b
 
 
 class ResultScreen(Screen):
@@ -20,25 +26,22 @@ class ResultScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.stats = {}
-        box = BoxLayout(orientation="vertical", spacing=16, padding=40)
+        box = BoxLayout(orientation="vertical", spacing=20, padding=30)
 
-        self.lbl_title = Label(text=self.TITLE, font_size=42, bold=True,
-                               color=self.TITLE_COLOR, size_hint=(1, 0.28))
+        self.lbl_title = Label(text=self.TITLE, font_size=50, bold=True,
+                               color=self.TITLE_COLOR, size_hint=(1, 0.26))
         box.add_widget(self.lbl_title)
 
-        self.lbl_stats = Label(text="", font_size=20, halign="center",
-                               size_hint=(1, 0.42))
+        self.lbl_stats = Label(text="", font_size=26, halign="center", size_hint=(1, 0.44))
         self.lbl_stats.bind(size=lambda w, *a: setattr(w, "text_size", w.size))
         box.add_widget(self.lbl_stats)
 
-        again = Button(text="CHƠI LẠI", font_size=22, bold=True,
-                       size_hint=(1, 0.15), background_color=(0.2, 0.7, 0.35, 1))
-        again.bind(on_release=self._again)
+        again = _rounded_btn("CHƠI LẠI", 28, (0.2, 0.7, 0.35, 1),
+                             self._again, size_hint=(1, 0.17))
         box.add_widget(again)
 
-        menu = Button(text="VỀ MENU", font_size=22, bold=True,
-                      size_hint=(1, 0.15), background_color=(0.3, 0.55, 0.95, 1))
-        menu.bind(on_release=self._menu)
+        menu = _rounded_btn("VỀ MENU", 28, (0.3, 0.55, 0.95, 1),
+                            self._menu, size_hint=(1, 0.17))
         box.add_widget(menu)
 
         self.add_widget(box)

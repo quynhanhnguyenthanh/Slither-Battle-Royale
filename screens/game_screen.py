@@ -18,7 +18,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.image import Image
-from kivy.graphics import (Color, Rectangle, Ellipse, Line,
+from kivy.graphics import (Color, Rectangle, Ellipse, Line, RoundedRectangle,
                            PushMatrix, PopMatrix, Rotate)
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -187,6 +187,7 @@ class GameWidget(Widget):
         for s in dead:
             s.die()
             self._drop_loot(s)
+            self.audio.play_sfx("loot")
             if s is not self.player:
                 self.snakes.remove(s)
                 self.bots_killed += 1
@@ -465,24 +466,41 @@ class GameScreen(Screen):
         root.add_widget(self.game)
 
         # HUD trên
-        top = BoxLayout(size_hint=(1, None), height=52, padding=8, spacing=8,
+        top = BoxLayout(size_hint=(1, None), height=64, padding=10, spacing=10,
                         pos_hint={"top": 1})
-        self.lbl_score = Label(text="Điểm: 0", font_size=18, bold=True)
-        self.lbl_len = Label(text="Dài: 0", font_size=18, bold=True)
-        self.lbl_coins = Label(text="Coin: 0", font_size=18, bold=True)
-        self.lbl_bots = Label(text="Bot: 0", font_size=18, bold=True)
-        self.btn_pause = Button(text="II", size_hint=(None, 1), width=50,
-                                background_normal="", background_color=(0.2, 0.4, 0.9, 1))
+        self.lbl_score = Label(text="Điểm: 0", font_size=22, bold=True,
+                               )
+        self.lbl_len = Label(text="Dài: 0", font_size=22, bold=True,
+                             )
+        self.lbl_coins = Label(text="Coin: 0", font_size=22, bold=True,
+                               )
+        self.lbl_bots = Label(text="Bot: 0", font_size=22, bold=True,
+                              )
+        self.btn_pause = Button(text="II", size_hint=(None, 1), width=56,
+                                background_normal="",
+                                background_color=(0, 0, 0, 0))
+        with self.btn_pause.canvas.before:
+            Color(0.2, 0.4, 0.9, 1)
+            rp = RoundedRectangle(pos=self.btn_pause.pos, size=self.btn_pause.size, radius=[10,])
+        self.btn_pause.bind(pos=lambda i, v, r=rp: setattr(r, 'pos', v),
+                            size=lambda i, v, r=rp: setattr(r, 'size', v))
         self.btn_pause.bind(on_release=self._on_pause)
         for w in (self.lbl_score, self.lbl_len, self.lbl_coins, self.lbl_bots, self.btn_pause):
             top.add_widget(w)
         root.add_widget(top)
 
         # Nút BOOST (giữ để tăng tốc) - tiện cho cảm ứng
-        self.btn_boost = Button(text="BOOST", size_hint=(None, None), size=(96, 96),
+        self.btn_boost = Button(text="BOOST", size_hint=(None, None), size=(116, 116),
                                 pos_hint={"right": 0.97, "y": 0.03},
-                                background_normal="", background_color=(0.95, 0.55, 0.2, 0.9),
+                                font_size=18,
+                                background_normal="",
+                                background_color=(0, 0, 0, 0),
                                 bold=True)
+        with self.btn_boost.canvas.before:
+            Color(0.95, 0.55, 0.2, 0.9)
+            rb = RoundedRectangle(pos=self.btn_boost.pos, size=self.btn_boost.size, radius=[16,])
+        self.btn_boost.bind(pos=lambda i, v, r=rb: setattr(r, 'pos', v),
+                            size=lambda i, v, r=rb: setattr(r, 'size', v))
         self.btn_boost.bind(on_press=lambda *a: self.game.set_boost(True),
                             on_release=lambda *a: self.game.set_boost(False))
         root.add_widget(self.btn_boost)
@@ -501,15 +519,29 @@ class GameScreen(Screen):
 
     def _build_pause_overlay(self):
         box = BoxLayout(orientation="vertical", size_hint=(None, None),
-                        size=(260, 240), pos_hint={"center_x": 0.5, "center_y": 0.5},
-                        spacing=12, padding=16)
-        box.add_widget(Label(text="TẠM DỪNG", font_size=28, bold=True))
-        b_resume = Button(text="Tiếp tục", background_normal="",
-                          background_color=(0.2, 0.7, 0.3, 1))
+                        size=(300, 280), pos_hint={"center_x": 0.5, "center_y": 0.5},
+                        spacing=14, padding=20)
+        box.add_widget(Label(text="TẠM DỪNG", font_size=32, bold=True,
+                             ))
+
+        b_resume = Button(text="Tiếp tục", font_size=22, bold=True,
+                          background_normal="", background_color=(0, 0, 0, 0))
+        with b_resume.canvas.before:
+            Color(0.2, 0.7, 0.3, 1)
+            r1 = RoundedRectangle(pos=b_resume.pos, size=b_resume.size, radius=[14,])
+        b_resume.bind(pos=lambda i, v, r=r1: setattr(r, 'pos', v),
+                      size=lambda i, v, r=r1: setattr(r, 'size', v))
         b_resume.bind(on_release=self._on_pause)
-        b_menu = Button(text="Về Menu chính", background_normal="",
-                        background_color=(0.8, 0.3, 0.3, 1))
+
+        b_menu = Button(text="Về Menu chính", font_size=22, bold=True,
+                        background_normal="", background_color=(0, 0, 0, 0))
+        with b_menu.canvas.before:
+            Color(0.8, 0.3, 0.3, 1)
+            r2 = RoundedRectangle(pos=b_menu.pos, size=b_menu.size, radius=[14,])
+        b_menu.bind(pos=lambda i, v, r=r2: setattr(r, 'pos', v),
+                    size=lambda i, v, r=r2: setattr(r, 'size', v))
         b_menu.bind(on_release=self._go_menu)
+
         box.add_widget(b_resume)
         box.add_widget(b_menu)
         return box
@@ -532,6 +564,10 @@ class GameScreen(Screen):
         paused = self.game.toggle_pause()
         self.pause_overlay.opacity = 1 if paused else 0
         self.pause_overlay.disabled = not paused
+        if paused:
+            self.manager.app.audio.play_sfx("pause")
+        else:
+            self.manager.app.audio.play_sfx("resume")
 
     def _go_menu(self, *args):
         self.game.stop()

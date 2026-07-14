@@ -123,10 +123,6 @@ class MainMenuScreen(Screen):
 
         self.add_widget(root)
 
-    def _resize_overlay(self, instance, value):
-        self.overlay.pos = instance.pos
-        self.overlay.size = instance.size
-
     def _btn(self, text, color, cb):
         b = Button(
             text=text,
@@ -134,8 +130,14 @@ class MainMenuScreen(Screen):
             bold=True,
             size_hint=(1, 0.13),
             background_normal="",
-            background_color=color,
+            background_color=(0, 0, 0, 0),
         )
+        with b.canvas.before:
+            Color(*color)
+            from kivy.graphics import RoundedRectangle
+            rect = RoundedRectangle(pos=b.pos, size=b.size, radius=[14,])
+        b.bind(pos=lambda i, v, r=rect: setattr(r, 'pos', v),
+               size=lambda i, v, r=rect: setattr(r, 'size', v))
         b.bind(on_release=cb)
         return b
 
@@ -145,7 +147,6 @@ class MainMenuScreen(Screen):
             data.get_best_score(),
             data.get_coins(),
         )
-
         self.video.state = "play"
 
     def on_leave(self, *args):

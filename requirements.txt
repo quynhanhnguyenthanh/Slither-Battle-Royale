@@ -1,7 +1,7 @@
 # Thư viện cần thiết để chạy game trên máy tính
 # Cài đặt: pip install -r requirements.txt
 kivy>=2.1.0
+ffpyplayer>=4.5.0
 
 # Để đóng gói APK Android (chỉ cần trên Linux/WSL/macOS):
 # pip install buildozer cython
-

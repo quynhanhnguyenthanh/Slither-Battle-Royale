@@ -17,7 +17,7 @@ source.include_exts = py,png,jpg,jpeg,kv,atlas,wav,mp3,ogg,json,ttf
 version = 1.0
 
 # Thư viện phụ thuộc
-requirements = python3,kivy
+requirements = python3,kivy,av,numpy
 
 # Hướng màn hình: dọc (portrait) cho game điện thoại
 orientation = portrait
