@@ -20,6 +20,59 @@ try:
 except Exception:
     _HAS_VIDEO = False
 
+try:
+    import av as _av
+    from kivy.clock import Clock as _Clock
+    from kivy.graphics.texture import Texture as _Texture
+    _HAS_AV = True
+except ImportError:
+    _HAS_AV = False
+
+
+class _VideoBackground:
+    def __init__(self, path, target_size=(420, 740), fps=15):
+        self._container = _av.open(path)
+        self._stream = self._container.streams.video[0]
+        self._fps = fps
+        self._target_w, self._target_h = target_size
+        self.texture = _Texture.create(
+            size=(self._target_w, self._target_h), colorfmt="rgb")
+        self._playing = False
+        self._clock_event = None
+        self._generator = None
+        self.seek(0)
+
+    def seek(self, pts):
+        self._container.seek(pts)
+        self._generator = self._container.decode(video=0)
+
+    def start(self):
+        if self._playing:
+            return
+        self._playing = True
+        self._clock_event = _Clock.schedule_interval(self._tick, 1.0 / self._fps)
+
+    def stop(self):
+        self._playing = False
+        if self._clock_event:
+            self._clock_event.cancel()
+            self._clock_event = None
+
+    def _tick(self, dt):
+        try:
+            frame = next(self._generator)
+        except StopIteration:
+            self.seek(0)
+            try:
+                frame = next(self._generator)
+            except StopIteration:
+                return
+        if frame.width != self._target_w or frame.height != self._target_h:
+            frame = frame.reformat(self._target_w, self._target_h)
+        img = frame.to_ndarray(format="rgb24")
+        self.texture.blit_buffer(
+            img.tobytes(), colorfmt="rgb", bufferfmt="ubyte")
+
 import config
 from utils import assets
 
@@ -36,6 +89,7 @@ class MainMenuScreen(Screen):
         # ==========================
 
         self.video = None
+        self._video_bg = None
         if _HAS_VIDEO:
             try:
                 self.video = Video(
@@ -50,6 +104,18 @@ class MainMenuScreen(Screen):
                 root.add_widget(self.video)
             except Exception:
                 self.video = None
+        if self.video is None and _HAS_AV:
+            try:
+                self._video_bg = _VideoBackground("assets/video/menu_background.mp4")
+                with root.canvas.before:
+                    Color(*config.COLOR_BG)
+                    self._bg_rect = Rectangle(pos=(0, 0), size=(1, 1))
+                    Color(1, 1, 1, 1)
+                    self._bg_img = Rectangle(
+                        texture=self._video_bg.texture, pos=(0, 0), size=(1, 1))
+                self.bind(size=self._resize, pos=self._resize)
+            except Exception:
+                self._video_bg = None
 
         # ==========================
         # MENU
@@ -131,9 +197,12 @@ class MainMenuScreen(Screen):
 
         self.add_widget(root)
 
-    def _resize_overlay(self, instance, value):
-        self.overlay.pos = instance.pos
-        self.overlay.size = instance.size
+    def _resize(self, *a):
+        if self._video_bg:
+            self._bg_rect.pos = self.pos
+            self._bg_rect.size = self.size
+            self._bg_img.pos = self.pos
+            self._bg_img.size = self.size
 
     def _btn(self, text, color, cb):
         b = Button(
@@ -161,10 +230,14 @@ class MainMenuScreen(Screen):
 
         if self.video:
             self.video.state = "play"
+        elif self._video_bg:
+            self._video_bg.start()
 
     def on_leave(self, *args):
         if self.video:
             self.video.state = "stop"
+        elif self._video_bg:
+            self._video_bg.stop()
 
     def _play(self, *a):
         self.manager.app.audio.play_sfx("click")

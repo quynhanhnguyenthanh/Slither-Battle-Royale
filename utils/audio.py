@@ -91,7 +91,7 @@ class AudioManager:
         return p if os.path.exists(p) else ""
 
     def _load_all(self):
-        if self._platform == "android":
+        if self._platform == "android" or not _HAV_AV:
             for name, filename in SFX_FILES.items():
                 path = self._path(filename)
                 self._sfx[name] = path if path else None
@@ -113,12 +113,25 @@ class AudioManager:
         vol = self.data.get_volume()
         if vol <= 0:
             return
-        if self._platform == "android":
-            self._play_android(name, vol)
-        else:
+        if self._sfx_pcm:
             self._play_desktop(name, vol)
+        elif self._sfx.get(name):
+            self._play_sfx_loader(name, vol)
 
     def _play_android(self, name, vol):
+        path = self._sfx.get(name)
+        if not path:
+            return
+        try:
+            from kivy.core.audio import SoundLoader
+            sound = SoundLoader.load(path)
+            if sound:
+                sound.volume = vol
+                sound.play()
+        except Exception:
+            pass
+
+    def _play_sfx_loader(self, name, vol):
         path = self._sfx.get(name)
         if not path:
             return
