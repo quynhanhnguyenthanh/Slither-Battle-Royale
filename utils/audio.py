@@ -2,12 +2,8 @@
 """
 utils/audio.py
 
-AudioManager: hiệu ứng âm thanh (.ogg) + nhạc nền (nếu có file).
+AudioManager: hiệu ứng âm thanh (.ogg) 
 Ánh xạ sự kiện game -> file thực trong assets/sounds. Thiếu file thì bỏ qua.
-
-Nhạc nền: bộ assets gốc KHÔNG kèm file nhạc nền. Nếu bạn thêm
-assets/sounds/bgm.ogg (hoặc music.ogg), game sẽ tự phát lặp và có thể
-bật/tắt trong màn Cài đặt.
 """
 
 import os
