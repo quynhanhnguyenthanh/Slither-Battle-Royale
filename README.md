@@ -51,9 +51,3 @@ assets/  images/skins  images/ui  sounds
 - **Bot AI:** chọn mồi gần nhất; nếu hướng đó bị chặn (mép sân/thân rắn) thì quét các góc lệch để tìm hướng thoáng gần nhất.
 - **Va chạm:** đầu ra ngoài bán kính sân, hoặc đầu chạm gần điểm thân của rắn khác → chết.
 - **Camera:** bám đầu người chơi, tự thu nhỏ (`snake_zoom`) khi rắn dài để vẫn bao quát.
-
-## 📦 Đóng gói APK (Linux/macOS/WSL)
-```bash
-pip install buildozer cython
-buildozer -v android debug   # file .apk nằm trong bin/
-```
